@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -45,13 +46,16 @@ func main() {
 	root.CompletionOptions.HiddenDefaultCmd = true
 	root.SetUsageTemplate(usageTemplate)
 	root.SetHelpTemplate("{{with .Short}}{{bold .}}\n{{end}}{{.UsageString}}")
+	var idle time.Duration
+	upCmd := &cobra.Command{
+		Use:   "up",
+		Short: "Create your local cluster, or wake it up if it is off",
+		Args:  cobra.NoArgs,
+		RunE:  func(*cobra.Command, []string) error { return up(idle) },
+	}
+	upCmd.Flags().DurationVar(&idle, "idle", time.Hour, "turn the cluster off after this long without kubectl commands, 0 keeps it on")
 	root.AddCommand(
-		&cobra.Command{
-			Use:   "up",
-			Short: "Create your local cluster",
-			Args:  cobra.NoArgs,
-			RunE:  func(*cobra.Command, []string) error { return up() },
-		},
+		upCmd,
 		&cobra.Command{
 			Use:   "down",
 			Short: "Delete your local cluster",

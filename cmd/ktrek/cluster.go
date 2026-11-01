@@ -103,13 +103,11 @@ func exists(p *cluster.Provider) (bool, error) {
 	return slices.Contains(names, clusterName), err
 }
 
-func up() error {
+func up(idle time.Duration) error {
 	p := provider(cmd.NewLogger())
 	if ok, err := exists(p); err != nil || ok {
 		if ok {
-			fmt.Printf("\n %s Your cluster is already up and running.\n\n", green("●"))
-			fmt.Printf("   Take a look:  %s\n", cyan("kubectl get nodes"))
-			fmt.Printf("   Start over:   %s, then %s\n\n", cyan("ktrek down"), cyan("ktrek up"))
+			return wake(idle)
 		}
 		return err
 	}
@@ -156,6 +154,9 @@ func up() error {
 	if err != nil {
 		return err
 	}
+	if err := prepareNode(idle); err != nil {
+		return err
+	}
 
 	fmt.Printf("\n %s Your cluster is ready %s\n\n", green("✓"), gray(fmt.Sprintf("(%s)", time.Since(start).Round(time.Second))))
 	fmt.Printf("   %s  %s %s\n", gray("context"), cyan("kind-ktrek"), gray("· kubectl uses it now, your other contexts are untouched"))
@@ -166,7 +167,38 @@ func up() error {
 		}
 		fmt.Printf("   %s  %s\n", label, l)
 	}
+	fmt.Printf("   %s  %s\n", gray("idle   "), idleLine(idle))
 	fmt.Printf("\n   Say hi to it:  %s\n\n", cyan("kubectl get nodes"))
+	return nil
+}
+
+// wake handles a cluster that already exists: it may be running or turned off.
+func wake(idle time.Duration) error {
+	on, err := nodeRunning()
+	if err != nil {
+		return err
+	}
+	if on {
+		if err := prepareNode(idle); err != nil {
+			return err
+		}
+		fmt.Printf("\n %s Your cluster is already up and running.\n\n", green("●"))
+		fmt.Printf("   %s  %s\n\n", gray("idle"), idleLine(idle))
+		fmt.Printf("   Take a look:  %s\n", cyan("kubectl get nodes"))
+		fmt.Printf("   Start over:   %s, then %s\n\n", cyan("ktrek down"), cyan("ktrek up"))
+		return nil
+	}
+
+	fmt.Printf("\n %s Your cluster was off. Waking it up...\n", gray("●"))
+	start := time.Now()
+	if err := startNode(); err != nil {
+		return err
+	}
+	if err := prepareNode(idle); err != nil {
+		return err
+	}
+	fmt.Printf(" %s Your cluster is back %s. Everything you had is still there.\n\n", green("✓"), gray(fmt.Sprintf("(%s)", time.Since(start).Round(time.Second))))
+	fmt.Printf("   %s  %s\n\n", gray("idle"), idleLine(idle))
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHostPortSkipsBusyPorts(t *testing.T) {
@@ -33,6 +34,21 @@ func TestHintTellsPermissionFromDaemonDown(t *testing.T) {
 		got := hint(errors.New(msg))
 		if want == "" && got != "" || !strings.Contains(got, want) {
 			t.Errorf("hint(%q) = %q, want it to mention %q", msg, got, want)
+		}
+	}
+}
+
+func TestHuman(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		time.Hour:                    "1h",
+		30 * time.Minute:             "30m",
+		90 * time.Second:             "1m30s",
+		90 * time.Minute:             "1h30m",
+		45 * time.Second:             "45s",
+		2*time.Hour + 30*time.Second: "2h0m30s",
+	} {
+		if got := human(d); got != want {
+			t.Errorf("human(%s) = %q, want %q", d, got, want)
 		}
 	}
 }
