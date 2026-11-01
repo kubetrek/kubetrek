@@ -134,6 +134,7 @@ func up() error {
 		}
 	}
 
+	kubi(happy, bold("Building your cluster"), "It takes about 30 seconds, a bit more the first time.")
 	start := time.Now()
 	err = p.Create(clusterName,
 		cluster.CreateWithRawConfig(fmt.Appendf(nil, clusterConfig, args...)),
