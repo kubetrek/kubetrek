@@ -36,7 +36,9 @@ type Object struct {
 	Name      string            `json:"name"`
 	Owners    []string          `json:"owners,omitempty"`
 	Labels    map[string]string `json:"labels,omitempty"`
-	Status    json.RawMessage   `json:"status,omitempty"`
+	// Selector is set for Services, so the web can link them to their Pods.
+	Selector map[string]string `json:"selector,omitempty"`
+	Status   json.RawMessage   `json:"status,omitempty"`
 }
 
 // ClusterEvent is a Kubernetes Event, shown in the timeline.

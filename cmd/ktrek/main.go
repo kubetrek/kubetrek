@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -54,8 +55,22 @@ func main() {
 		RunE:  func(*cobra.Command, []string) error { return up(idle) },
 	}
 	upCmd.Flags().DurationVar(&idle, "idle", time.Hour, "turn the cluster off after this long without kubectl commands, 0 keeps it on")
+	var namespace string
+	agentCmd := &cobra.Command{
+		Use:    "agent",
+		Short:  "Print the messages the agent would send to the web",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt)
+			defer stop()
+			return runAgent(ctx, namespace, os.Stdout)
+		},
+	}
+	agentCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace to watch")
 	root.AddCommand(
 		upCmd,
+		agentCmd,
 		&cobra.Command{
 			Use:   "down",
 			Short: "Delete your local cluster",
