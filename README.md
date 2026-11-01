@@ -1,4 +1,8 @@
-# KubeTrek
+<p align="center">
+  <img src="assets/logo.svg" width="120" alt="KubeTrek logo">
+</p>
+
+<h1 align="center">KubeTrek</h1>
 
 Learn Kubernetes in your own terminal while the web shows what is happening in your cluster, live.
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="KubeTrek">
+  <title>KubeTrek</title>
+  <polygon points="60,10 103.3,35 103.3,85 60,110 16.7,85 16.7,35" fill="#3a7bff" stroke="#3a7bff" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M42 34V86" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M54 64L78 86" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M54 54L76 36" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-dasharray="0.1 10"/>
+  <circle cx="80" cy="33" r="11" fill="#5ff3ff" opacity="0.35"/>
+  <circle cx="80" cy="33" r="6.5" fill="#5ff3ff"/>
+</svg>
