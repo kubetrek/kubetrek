@@ -71,11 +71,17 @@ func (a *agent) emit(t protocol.Type, kind string, old, obj any) {
 	if !a.ready {
 		return
 	}
+	// When a watch expires the informer relists and calls Update for every object it already had,
+	// so updates that change nothing are dropped, Events included.
 	if e, ok := obj.(*corev1.Event); ok {
-		if t != protocol.Deleted {
-			ce := clusterEvent(e)
-			a.send(protocol.Message{Type: protocol.Event, Event: &ce})
+		if t == protocol.Deleted {
+			return
 		}
+		ce := clusterEvent(e)
+		if t == protocol.Modified && clusterEvent(old.(*corev1.Event)) == ce {
+			return
+		}
+		a.send(protocol.Message{Type: protocol.Event, Event: &ce})
 		return
 	}
 	o := project(kind, obj)
