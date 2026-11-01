@@ -101,9 +101,20 @@ func kubi(m mood, lines ...string) {
 	fmt.Println()
 }
 
-func bold(s string) string {
-	if !colorful() {
-		return s
+func style(code string) func(string) string {
+	return func(s string) string {
+		if !colorful() {
+			return s
+		}
+		return "\x1b[" + code + "m" + s + "\x1b[0m"
 	}
-	return "\x1b[1m" + s + "\x1b[0m"
 }
+
+var (
+	bold  = style("1")
+	cyan  = style("38;2;95;243;255")
+	blue  = style("38;2;110;155;255")
+	amber = style("38;2;255;181;71")
+	green = style("38;2;120;225;150")
+	gray  = style("38;2;135;148;168")
+)

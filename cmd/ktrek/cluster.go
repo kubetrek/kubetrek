@@ -6,10 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/kind/pkg/cmd"
+	"sigs.k8s.io/kind/pkg/exec"
+	"sigs.k8s.io/kind/pkg/log"
 )
 
 const clusterName = "ktrek"
@@ -91,8 +94,8 @@ func free(port int) bool {
 	return false
 }
 
-func provider() *cluster.Provider {
-	return cluster.NewProvider(cluster.ProviderWithDocker(), cluster.ProviderWithLogger(cmd.NewLogger()))
+func provider(logger log.Logger) *cluster.Provider {
+	return cluster.NewProvider(cluster.ProviderWithDocker(), cluster.ProviderWithLogger(logger))
 }
 
 func exists(p *cluster.Provider) (bool, error) {
@@ -101,10 +104,12 @@ func exists(p *cluster.Provider) (bool, error) {
 }
 
 func up() error {
-	p := provider()
+	p := provider(cmd.NewLogger())
 	if ok, err := exists(p); err != nil || ok {
 		if ok {
-			fmt.Println("The ktrek cluster is already running.")
+			fmt.Printf("\n %s Your cluster is already up and running.\n\n", green("●"))
+			fmt.Printf("   Take a look:  %s\n", cyan("kubectl get nodes"))
+			fmt.Printf("   Start over:   %s, then %s\n\n", cyan("ktrek down"), cyan("ktrek up"))
 		}
 		return err
 	}
@@ -122,19 +127,25 @@ func up() error {
 	}
 
 	args := []any{policy}
-	var moved []string
+	var portLines []string
 	for _, pm := range ports {
 		h, err := hostPort(pm.container, pm.fallback)
 		if err != nil {
 			return err
 		}
 		args = append(args, h)
+		line := fmt.Sprintf("%s → %s", blue(fmt.Sprint(pm.container)), cyan(fmt.Sprintf("localhost:%d", h)))
 		if h != pm.container {
-			moved = append(moved, fmt.Sprintf("cluster port %d is on localhost:%d (%d was taken)", pm.container, h, pm.container))
+			line = fmt.Sprintf("%s → %s %s", blue(fmt.Sprint(pm.container)), amber(fmt.Sprintf("localhost:%d", h)), gray(fmt.Sprintf("(%d was taken)", pm.container)))
 		}
+		portLines = append(portLines, line)
 	}
 
-	kubi(happy, bold("Building your cluster"), "It takes about 30 seconds, a bit more the first time.")
+	kubi(happy,
+		bold("Let's build your cluster!"),
+		"One node, with auditing on so I can see your kubectl commands.",
+		gray("About 30 seconds. The first time takes longer: it downloads the node image."),
+	)
 	start := time.Now()
 	err = p.Create(clusterName,
 		cluster.CreateWithRawConfig(fmt.Appendf(nil, clusterConfig, args...)),
@@ -145,25 +156,50 @@ func up() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nCluster ready in %s.\n", time.Since(start).Round(time.Second))
-	fmt.Println("kubectl now uses the context kind-ktrek. Your other contexts were not changed.")
-	for _, m := range moved {
-		fmt.Println(m)
+
+	fmt.Printf("\n %s Your cluster is ready %s\n\n", green("✓"), gray(fmt.Sprintf("(%s)", time.Since(start).Round(time.Second))))
+	fmt.Printf("   %s  %s %s\n", gray("context"), cyan("kind-ktrek"), gray("· kubectl uses it now, your other contexts are untouched"))
+	for i, l := range portLines {
+		label := "       "
+		if i == 0 {
+			label = gray("ports  ")
+		}
+		fmt.Printf("   %s  %s\n", label, l)
 	}
+	fmt.Printf("\n   Say hi to it:  %s\n\n", cyan("kubectl get nodes"))
 	return nil
 }
 
 func down() error {
-	p := provider()
+	p := provider(log.NoopLogger{})
 	if ok, err := exists(p); err != nil || !ok {
 		if err == nil {
-			fmt.Println("There is no ktrek cluster to delete.")
+			fmt.Printf("\n %s There is no cluster to delete. Create one with %s.\n\n", gray("●"), cyan("ktrek up"))
 		}
 		return err
 	}
+	fmt.Printf("\n %s Deleting your cluster...\n", gray("●"))
 	if err := p.Delete(clusterName, ""); err != nil {
 		return err
 	}
-	fmt.Println("Cluster deleted. The kind-ktrek context was removed from kubectl.")
+	fmt.Printf(" %s Cluster deleted. Your other kubectl contexts are just as you left them.\n", green("✓"))
+	fmt.Printf("\n   See you next time! %s\n\n", gray("Run ktrek up whenever you want to come back."))
 	return nil
+}
+
+// hint turns the Docker errors people hit most into something they can act on.
+func hint(err error) string {
+	out := err.Error()
+	if re := exec.RunErrorForError(err); re != nil {
+		out += string(re.Output)
+	}
+	switch {
+	case strings.Contains(out, "executable file not found"):
+		return "I can't find the " + cyan("docker") + " command. Install Docker (Docker Desktop, OrbStack, Colima...) and try again."
+	case strings.Contains(out, "permission denied") && strings.Contains(out, "docker"):
+		return "Your user can't talk to Docker. Run " + cyan("sudo usermod -aG docker $USER") + ", then log out and back in."
+	case strings.Contains(out, "Cannot connect to the Docker daemon"), strings.Contains(out, "failed to connect to the docker API"):
+		return "Docker isn't running. Start it and run " + cyan("ktrek up") + " again."
+	}
+	return ""
 }
