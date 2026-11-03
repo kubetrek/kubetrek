@@ -35,14 +35,17 @@ func main() {
 		Short:         "Learn Kubernetes in your own terminal",
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Run: func(c *cobra.Command, _ []string) {
+		RunE: func(c *cobra.Command, _ []string) error {
+			if interactive() {
+				return menu()
+			}
 			kubi(happy,
 				bold("KubeTrek")+gray(" · learn Kubernetes in your own terminal"),
 				"Hi, I'm "+cyan("Kubi")+". I'll be watching your cluster with you.",
 				"",
 				"New here? Run "+cyan("ktrek up")+" and we'll build your first cluster.",
 			)
-			c.Usage()
+			return c.Usage()
 		},
 	}
 	root.CompletionOptions.HiddenDefaultCmd = true
