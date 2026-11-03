@@ -9,10 +9,15 @@ import (
 	"reflect"
 	"sync"
 
+	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
+	rbacv1ac "k8s.io/client-go/applyconfigurations/rbac/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -111,16 +116,64 @@ func (a *agent) snapshot() {
 	a.ready = true
 }
 
-// runAgent sends a snapshot, then deltas, and a new snapshot each time resync fires.
-func runAgent(ctx context.Context, namespace string, w io.Writer, resync <-chan struct{}) error {
-	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+const agentAccount = "ktrek-agent"
+
+// agentConfig gives the agent its own read-only identity. The audit policy only records
+// kubernetes-admin, so the agent's watches no longer count as kubectl activity and the idle
+// shutdown still works while it runs. The admin kubeconfig is used once, to set this up.
+func agentConfig(ctx context.Context) (*rest.Config, error) {
+	admin, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{CurrentContext: "kind-" + clusterName},
 	).ClientConfig()
 	if err != nil {
-		return fmt.Errorf("can't reach the ktrek cluster, is it up? %w", err)
+		return nil, fmt.Errorf("can't reach the ktrek cluster, is it up? %w", err)
 	}
-	cfg.UserAgent = "ktrek-agent/dev"
+	admin.UserAgent = "ktrek-agent/dev"
+	cs, err := kubernetes.NewForConfig(admin)
+	if err != nil {
+		return nil, err
+	}
+
+	apply := metav1.ApplyOptions{FieldManager: "ktrek", Force: true}
+	read := []string{"get", "list", "watch"}
+	if _, err := cs.CoreV1().ServiceAccounts("kube-system").Apply(ctx,
+		corev1ac.ServiceAccount(agentAccount, "kube-system"), apply); err != nil {
+		return nil, err
+	}
+	if _, err := cs.RbacV1().ClusterRoles().Apply(ctx, rbacv1ac.ClusterRole(agentAccount).WithRules(
+		rbacv1ac.PolicyRule().WithAPIGroups("").WithResources("pods", "services", "events").WithVerbs(read...),
+		rbacv1ac.PolicyRule().WithAPIGroups("apps").WithResources("deployments", "replicasets").WithVerbs(read...),
+	), apply); err != nil {
+		return nil, err
+	}
+	if _, err := cs.RbacV1().ClusterRoleBindings().Apply(ctx, rbacv1ac.ClusterRoleBinding(agentAccount).
+		WithRoleRef(rbacv1ac.RoleRef().WithAPIGroup("rbac.authorization.k8s.io").WithKind("ClusterRole").WithName(agentAccount)).
+		WithSubjects(rbacv1ac.Subject().WithKind("ServiceAccount").WithName(agentAccount).WithNamespace("kube-system")),
+		apply); err != nil {
+		return nil, err
+	}
+
+	// ponytail: one token per run; an agent alive for over a week would need to ask for a new one.
+	week := int64(7 * 24 * 3600)
+	tr, err := cs.CoreV1().ServiceAccounts("kube-system").CreateToken(ctx, agentAccount,
+		&authenticationv1.TokenRequest{Spec: authenticationv1.TokenRequestSpec{ExpirationSeconds: &week}},
+		metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	cfg := rest.AnonymousClientConfig(admin)
+	cfg.BearerToken = tr.Status.Token
+	cfg.UserAgent = admin.UserAgent
+	return cfg, nil
+}
+
+// runAgent sends a snapshot, then deltas, and a new snapshot each time resync fires.
+func runAgent(ctx context.Context, namespace string, w io.Writer, resync <-chan struct{}) error {
+	cfg, err := agentConfig(ctx)
+	if err != nil {
+		return err
+	}
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return err
