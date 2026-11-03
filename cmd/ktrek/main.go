@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -55,21 +56,43 @@ func main() {
 		RunE:  func(*cobra.Command, []string) error { return up(idle) },
 	}
 	upCmd.Flags().DurationVar(&idle, "idle", time.Hour, "turn the cluster off after this long without kubectl commands, 0 keeps it on")
-	var namespace string
+	var namespace, server, code string
+	var detached bool
 	agentCmd := &cobra.Command{
 		Use:    "agent",
-		Short:  "Print the messages the agent would send to the web",
+		Short:  "Print the messages the agent would send to the web, or send them with --connect",
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt)
+			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return runAgent(ctx, namespace, os.Stdout)
+			if code != "" {
+				return runConnected(ctx, server, code, namespace, detached)
+			}
+			return runAgent(ctx, namespace, os.Stdout, nil)
 		},
 	}
 	agentCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace to watch")
+	agentCmd.Flags().StringVar(&code, "connect", "", "send the messages to the web page with this code")
+	agentCmd.Flags().StringVar(&server, "server", defaultServer, "KubeTrek server")
+	agentCmd.Flags().BoolVar(&detached, "detached", false, "report the connection on stdout and keep running in the background")
+	connectCmd := &cobra.Command{
+		Use:   "connect <code>",
+		Short: "Show your cluster live in the browser tab with this code",
+		Args:  cobra.ExactArgs(1),
+		RunE:  func(_ *cobra.Command, args []string) error { return connect(server, args[0], namespace) },
+	}
+	connectCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace to watch")
+	connectCmd.Flags().StringVar(&server, "server", defaultServer, "KubeTrek server")
 	root.AddCommand(
 		upCmd,
+		connectCmd,
+		&cobra.Command{
+			Use:   "disconnect",
+			Short: "Stop showing your cluster on the web",
+			Args:  cobra.NoArgs,
+			RunE:  func(*cobra.Command, []string) error { return disconnect() },
+		},
 		agentCmd,
 		&cobra.Command{
 			Use:   "down",
@@ -79,15 +102,19 @@ func main() {
 		},
 	)
 	if err := root.Execute(); err != nil {
-		msg := []string{err.Error()}
-		if h := hint(err); h != "" {
-			msg = []string{h, "", gray(err.Error())}
-		}
-		if colorful() {
-			kubi(worried, append([]string{bold("Uh-oh, something is off.")}, msg...)...)
-		} else {
-			fmt.Fprintln(os.Stderr, "Error:", strings.Join(msg, "\n"))
-		}
+		report(err)
 		os.Exit(1)
+	}
+}
+
+func report(err error) {
+	msg := []string{err.Error()}
+	if h := hint(err); h != "" {
+		msg = []string{h, "", gray(err.Error())}
+	}
+	if colorful() {
+		kubi(worried, append([]string{bold("Uh-oh, something is off.")}, msg...)...)
+	} else {
+		fmt.Fprintln(os.Stderr, "Error:", strings.Join(msg, "\n"))
 	}
 }

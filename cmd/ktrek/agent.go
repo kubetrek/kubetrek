@@ -111,7 +111,8 @@ func (a *agent) snapshot() {
 	a.ready = true
 }
 
-func runAgent(ctx context.Context, namespace string, w io.Writer) error {
+// runAgent sends a snapshot, then deltas, and a new snapshot each time resync fires.
+func runAgent(ctx context.Context, namespace string, w io.Writer, resync <-chan struct{}) error {
 	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		clientcmd.NewDefaultClientConfigLoadingRules(),
 		&clientcmd.ConfigOverrides{CurrentContext: "kind-" + clusterName},
@@ -161,7 +162,13 @@ func runAgent(ctx context.Context, namespace string, w io.Writer) error {
 		return ctx.Err()
 	}
 	a.snapshot()
-	<-ctx.Done()
-	f.Shutdown()
-	return nil
+	for {
+		select {
+		case <-resync:
+			a.snapshot()
+		case <-ctx.Done():
+			f.Shutdown()
+			return nil
+		}
+	}
 }
