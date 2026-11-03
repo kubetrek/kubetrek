@@ -1,4 +1,4 @@
-// Package protocol defines the messages the agent sends to the web, through the backend.
+// Package protocol defines the messages between the agent, the server and the web.
 // The web's TypeScript types are generated from this file.
 package protocol
 
@@ -18,6 +18,14 @@ const (
 	Deleted  Type = "deleted"
 	Event    Type = "event"
 	Check    Type = "check"
+
+	// Sent by the server.
+	// Code tells the web which code to show in `ktrek connect <code>`.
+	Code         Type = "code"
+	Connected    Type = "connected"
+	Disconnected Type = "disconnected"
+	// Resync asks the agent for a new snapshot, after the web reloads.
+	Resync Type = "resync"
 )
 
 type Message struct {
@@ -26,6 +34,7 @@ type Message struct {
 	Object  *Object       `json:"object,omitempty"`
 	Event   *ClusterEvent `json:"event,omitempty"`
 	Check   *StepCheck    `json:"check,omitempty"`
+	Code    string        `json:"code,omitempty"`
 }
 
 // Object is what the web needs to draw a node of the graph. Never the spec,

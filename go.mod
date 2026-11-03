@@ -3,6 +3,7 @@ module github.com/kubetrek/kubetrek
 go 1.26.0
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/spf13/cobra v1.10.2
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
