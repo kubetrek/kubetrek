@@ -203,6 +203,9 @@ func wake(idle time.Duration) error {
 }
 
 func down() error {
+	if err := stopAgent(); err != nil {
+		return err
+	}
 	p := provider(log.NoopLogger{})
 	if ok, err := exists(p); err != nil || !ok {
 		if err == nil {
